@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-change-this-in-production'
 DEBUG = False
 
 ALLOWED_HOSTS = ['*']
-ALLOWED_HOSTS = ['https://ilmaanandaafreen.pythonanywhere.com/','http://ilmaanandaafreen.pythonanywhere.com/']
+ALLOWED_HOSTS = ['ilmaanandaafreen.pythonanywhere.com','https://ilmaanandaafreen.pythonanywhere.com/','http://ilmaanandaafreen.pythonanywhere.com/']
 
 
 # Application definition
