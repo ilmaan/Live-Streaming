@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-change-this-in-production'
 DEBUG = False
 
 ALLOWED_HOSTS = ['*']
-ALLOWED_HOSTS = ['ilmaanandaafreen.pythonanywhere.com','https://ilmaanandaafreen.pythonanywhere.com/','http://ilmaanandaafreen.pythonanywhere.com/']
+# ALLOWED_HOSTS = ['ilmaanandaafreen.pythonanywhere.com','https://ilmaanandaafreen.pythonanywhere.com/','http://ilmaanandaafreen.pythonanywhere.com/']
 
 
 # Application definition
@@ -74,14 +74,18 @@ TEMPLATES = [
 # ASGI application for Channels
 ASGI_APPLICATION = 'livestream_project.asgi.application'
 
-# Channel layers configuration (using in-memory for development)
+# Channel layers configuration
+# CRITICAL FOR DEPLOYMENT: 
+# 1. You MUST use Redis in production. InMemoryChannelLayer will NOT work with multiple workers.
+# 2. You MUST use an ASGI server like Daphne or Hypercorn, NOT Gunicorn/uWSGI alone.
+# 3. WebRTC REQUIRES HTTPS.
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels.layers.InMemoryChannelLayer',
     },
 }
 
-# For production with Redis:
+# Uncomment and configure for production (requires 'pip install channels-redis')
 # CHANNEL_LAYERS = {
 #     'default': {
 #         'BACKEND': 'channels_redis.core.RedisChannelLayer',
@@ -90,6 +94,9 @@ CHANNEL_LAYERS = {
 #         },
 #     },
 # }
+
+# If you are behind a proxy (Nginx, Load Balancer), uncomment this:
+# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 WSGI_APPLICATION = 'livestream_project.wsgi.application'
 
