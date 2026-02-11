@@ -1,0 +1,318 @@
+{% extends 'base.html' %}
+
+{% block title %}Hosting: {{ stream.title }}{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>🎥 {{ stream.title }}</h1>
+    <p>Hosted by {{ stream.host_name }}</p>
+</div>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+        <span class="status-badge status-live">LIVE</span>
+        <span id="viewerCount" style="color: #666;">👥 0 viewers</span>
+    </div>
+    
+    <div class="video-container" id="videoContainer">
+        <video id="localVideo" autoplay muted playsinline></video>
+        <div class="video-placeholder" id="placeholder" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;">
+            <p>Click "Start Camera" to begin streaming</p>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button id="startBtn" class="btn btn-primary">📹 Start Camera</button>
+        <button id="stopBtn" class="btn btn-danger" style="display: none;">⏹ Stop Stream</button>
+    </div>
+</div>
+
+<div class="card share-section" id="shareSection" style="display: none;">
+    <h3>🔗 Share Your Stream</h3>
+    <p style="margin-bottom: 15px; color: #666;">Copy this link and share it with your audience:</p>
+    <div class="share-link">
+        <input type="text" id="shareUrl" value="{{ share_url }}" readonly>
+        <button class="btn btn-secondary" onclick="copyToClipboard(document.getElementById('shareUrl').value)">
+            📋 Copy
+        </button>
+    </div>
+</div>
+
+<div class="card" style="background: #fff3e0; border-left: 4px solid #ff9800;">
+    <h3 style="margin-bottom: 10px;">⚡ Stream Tips</h3>
+    <ul style="margin: 0; padding-left: 20px; color: #666;">
+        <li>Make sure you're in a well-lit area</li>
+        <li>Use a stable internet connection</li>
+        <li>Keep your device charged or plugged in</li>
+        <li>Close unnecessary apps to save bandwidth</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const streamId = '{{ stream.stream_id }}';
+let localStream = null;
+let ws = null;
+let peerConnections = {};
+let isStreaming = false;
+
+const localVideo = document.getElementById('localVideo');
+const placeholder = document.getElementById('placeholder');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const shareSection = document.getElementById('shareSection');
+const viewerCount = document.getElementById('viewerCount');
+
+// WebRTC configuration
+const config = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+    ]
+};
+
+// Connect to WebSocket
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws/stream/${streamId}/host/`);
+    
+    ws.onopen = function() {
+        console.log('WebSocket connected');
+    };
+    
+    ws.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        handleSignalingMessage(data);
+    };
+    
+    ws.onclose = function() {
+        console.log('WebSocket disconnected');
+        // Reconnect after 3 seconds
+        setTimeout(connectWebSocket, 3000);
+    };
+    
+    ws.onerror = function(error) {
+        console.error('WebSocket error:', error);
+    };
+}
+
+function handleSignalingMessage(data) {
+    if (data.type === 'offer') {
+        handleOffer(data);
+    } else if (data.type === 'answer') {
+        handleAnswer(data);
+    } else if (data.type === 'ice-candidate') {
+        handleIceCandidate(data);
+    } else if (data.type === 'viewer_joined') {
+        createPeerConnection(data.viewer_id);
+    }
+}
+
+async function createPeerConnection(viewerId) {
+    if (!localStream) return;
+    
+    const pc = new RTCPeerConnection(config);
+    peerConnections[viewerId] = pc;
+    
+    // Add local stream tracks to peer connection
+    localStream.getTracks().forEach(track => {
+        pc.addTrack(track, localStream);
+    });
+    
+    // Handle ICE candidates
+    pc.onicecandidate = function(event) {
+        if (event.candidate) {
+            sendMessage({
+                type: 'ice-candidate',
+                candidate: event.candidate,
+                target: viewerId
+            });
+        }
+    };
+    
+    // Create and send offer
+    try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        sendMessage({
+            type: 'offer',
+            offer: offer,
+            target: viewerId
+        });
+    } catch (error) {
+        console.error('Error creating offer:', error);
+    }
+}
+
+async function handleOffer(data) {
+    // Host doesn't handle offers, only viewers do
+}
+
+let iceCandidatesQueues = {};
+
+async function handleAnswer(data) {
+    const pc = peerConnections[data.sender];
+    if (pc) {
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            
+            // Process queued candidates for this specific viewer
+            if (iceCandidatesQueues[data.sender]) {
+                while (iceCandidatesQueues[data.sender].length > 0) {
+                    const candidate = iceCandidatesQueues[data.sender].shift();
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                }
+            }
+        } catch (error) {
+            console.error('Error setting remote description:', error);
+        }
+    }
+}
+
+async function handleIceCandidate(data) {
+    const pc = peerConnections[data.sender];
+    if (pc) {
+        if (pc.remoteDescription) {
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (error) {
+                console.error('Error adding ICE candidate:', error);
+            }
+        } else {
+            // Queue candidates if remote description is not set yet
+            if (!iceCandidatesQueues[data.sender]) {
+                iceCandidatesQueues[data.sender] = [];
+            }
+            iceCandidatesQueues[data.sender].push(data.candidate);
+        }
+    }
+}
+
+function sendMessage(message) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(message));
+    }
+}
+
+async function startStreaming() {
+    try {
+        // Check if browser supports getUserMedia and we are in a secure context
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('Browser API not available. This feature requires HTTPS or localhost.');
+        }
+
+        // Log available devices for debugging
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        console.log('Available devices:', devices);
+
+        const hasVideo = devices.some(device => device.kind === 'videoinput');
+        const hasAudio = devices.some(device => device.kind === 'audioinput');
+
+        console.log(`Hardware check: Video=${hasVideo}, Audio=${hasAudio}`);
+
+        if (!hasVideo && !hasAudio) {
+            throw { name: 'NotFoundError', message: 'No camera or microphone detected.' };
+        }
+
+        try {
+            // Try to get both first
+            localStream = await navigator.mediaDevices.getUserMedia({
+                video: hasVideo,
+                audio: hasAudio
+            });
+        } catch (err) {
+            console.warn('Failed to get both video and audio, trying video only:', err);
+            if (hasVideo) {
+                // Try video only as fallback
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: false
+                });
+                showToast('Started with video only (microphone not available or blocked).');
+            } else {
+                throw err; // Re-throw if even video fails or wasn't available
+            }
+        }
+        
+        localVideo.srcObject = localStream;
+        placeholder.style.display = 'none';
+        
+        isStreaming = true;
+        startBtn.style.display = 'none';
+        stopBtn.style.display = 'inline-block';
+        shareSection.style.display = 'block';
+        
+        // Connect WebSocket
+        connectWebSocket();
+        
+        showToast('Stream started! Share your link with viewers.');
+    } catch (error) {
+        console.error('Error accessing media devices:', error);
+        
+        let errorMessage = 'Error accessing camera/microphone.';
+        
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            errorMessage = 'Permission denied. Please allow camera and microphone access in your browser address bar.';
+        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+            errorMessage = 'No camera or microphone found. Please ensure your devices are plugged in and not disabled in system settings.';
+        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+            errorMessage = 'Camera or microphone is already in use by another application (like Zoom or Teams).';
+        } else if (error.name === 'OverconstrainedError') {
+            errorMessage = 'Camera does not support the requested settings.';
+        } else if (error.message && error.message.includes('HTTPS')) {
+            errorMessage = 'Camera access requires a secure connection (HTTPS) or localhost.';
+        }
+        
+        showToast(errorMessage);
+        console.log('Detailed error:', error.name, error.message);
+    }
+}
+
+function stopStreaming() {
+    // Stop all tracks
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    
+    // Close all peer connections
+    Object.values(peerConnections).forEach(pc => pc.close());
+    peerConnections = {};
+    
+    // Close WebSocket
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    
+    localVideo.srcObject = null;
+    placeholder.style.display = 'flex';
+    placeholder.innerHTML = '<p>Stream ended</p>';
+    
+    isStreaming = false;
+    startBtn.style.display = 'inline-block';
+    stopBtn.style.display = 'none';
+    shareSection.style.display = 'none';
+    
+    showToast('Stream ended');
+    
+    // Redirect to home after a delay
+    setTimeout(() => {
+        window.location.href = '/end/{{ stream.stream_id }}/';
+    }, 2000);
+}
+
+startBtn.addEventListener('click', startStreaming);
+stopBtn.addEventListener('click', stopStreaming);
+
+// Handle page unload
+window.addEventListener('beforeunload', function() {
+    if (isStreaming) {
+        stopStreaming();
+    }
+});
+</script>
+{% endblock %}

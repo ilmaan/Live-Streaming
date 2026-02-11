@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}Start Live Stream{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>🎥 Live Stream</h1>
+    <p>Start streaming and share with anyone, anywhere</p>
+</div>
+
+<div class="card" style="max-width: 500px; margin: 0 auto;">
+    <h2 style="margin-bottom: 20px; text-align: center;">Create Your Stream</h2>
+    
+    <div class="info-box">
+        <p>Fill in the details below to start your live stream. You'll get a unique link to share with your audience.</p>
+    </div>
+    
+    <form id="streamForm">
+        <div class="form-group">
+            <label for="title">Stream Title</label>
+            <input type="text" id="title" name="title" placeholder="My Awesome Stream" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="host_name">Your Name</label>
+            <input type="text" id="host_name" name="host_name" placeholder="John Doe" required>
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%;">
+            🚀 Start Streaming
+        </button>
+    </form>
+</div>
+
+<div class="card" style="max-width: 500px; margin: 20px auto; text-align: center;">
+    <h3 style="margin-bottom: 15px;">How It Works</h3>
+    <div style="display: grid; gap: 15px; text-align: left;">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">1</div>
+            <p style="margin: 0;">Enter your stream details and click "Start Streaming"</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">2</div>
+            <p style="margin: 0;">Allow camera access when prompted</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">3</div>
+            <p style="margin: 0;">Copy and share your unique stream link</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">4</div>
+            <p style="margin: 0;">Anyone with the link can watch your stream instantly</p>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('streamForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const title = document.getElementById('title').value;
+    const hostName = document.getElementById('host_name').value;
+    
+    try {
+        const response = await fetch('/api/create-stream/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                title: title,
+                host_name: hostName
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            window.location.href = `/host/${data.stream_id}/`;
+        } else {
+            showToast('Error creating stream: ' + data.error);
+        }
+    } catch (error) {
+        showToast('Error creating stream. Please try again.');
+    }
+});
+</script>
+{% endblock %}
