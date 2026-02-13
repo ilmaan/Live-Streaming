@@ -22,9 +22,14 @@
                 <p style="font-size: 0.9rem; opacity: 0.8;">The host will appear here shortly</p>
             </div>
         </div>
-        <button id="unmuteBtn" style="position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.6); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; display: none;">
-            🔊 Unmute
-        </button>
+        <div id="videoControls" style="position: absolute; bottom: 10px; right: 10px; display: flex; gap: 10px; z-index: 10;">
+            <button id="unmuteBtn" style="background: rgba(0,0,0,0.6); color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; display: none; align-items: center; gap: 5px;">
+                🔊 Unmute
+            </button>
+            <button id="fullscreenBtn" style="background: rgba(0,0,0,0.6); color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; display: none; align-items: center; gap: 5px;">
+                📺 Fullscreen
+            </button>
+        </div>
     </div>
     
     <div class="controls">
@@ -60,11 +65,47 @@ const placeholder = document.getElementById('placeholder');
 const connectionStatus = document.getElementById('connectionStatus');
 const reconnectBtn = document.getElementById('reconnectBtn');
 const unmuteBtn = document.getElementById('unmuteBtn');
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+const videoContainer = document.getElementById('videoContainer');
 
 unmuteBtn.addEventListener('click', () => {
     remoteVideo.muted = false;
     unmuteBtn.style.display = 'none';
 });
+
+fullscreenBtn.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+        if (videoContainer.requestFullscreen) {
+            videoContainer.requestFullscreen();
+        } else if (videoContainer.webkitRequestFullscreen) { /* Safari */
+            videoContainer.webkitRequestFullscreen();
+        } else if (videoContainer.msRequestFullscreen) { /* IE11 */
+            videoContainer.msRequestFullscreen();
+        }
+        fullscreenBtn.innerHTML = '🔽 Exit Fullscreen';
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) { /* Safari */
+            document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) { /* IE11 */
+            document.msExitFullscreen();
+        }
+        fullscreenBtn.innerHTML = '📺 Fullscreen';
+    }
+});
+
+// Handle fullscreen change events to update button text
+document.addEventListener('fullscreenchange', handleFullscreenChange);
+document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+function handleFullscreenChange() {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
+        fullscreenBtn.innerHTML = '📺 Fullscreen';
+    }
+}
 
 // WebRTC configuration
 const config = {
@@ -95,11 +136,14 @@ function connectWebSocket() {
         handleSignalingMessage(data);
     };
     
-    ws.onclose = function() {
-        console.log('WebSocket disconnected');
-        connectionStatus.textContent = '🔴 Disconnected';
-        connectionStatus.style.color = '#f44336';
-        reconnectBtn.style.display = 'inline-block';
+    ws.onclose = function(e) {
+        console.log('WebSocket disconnected. Reconnecting in 3s...', e.reason);
+        connectionStatus.textContent = '� Reconnecting...';
+        connectionStatus.style.color = '#ff9800';
+        
+        setTimeout(() => {
+            reconnect();
+        }, 3000);
     };
     
     ws.onerror = function(error) {
@@ -188,7 +232,8 @@ function createPeerConnection() {
             placeholder.style.display = 'none';
             connectionStatus.textContent = '📹 Streaming';
             connectionStatus.style.color = '#4caf50';
-            unmuteBtn.style.display = 'block';
+            unmuteBtn.style.display = 'flex';
+            fullscreenBtn.style.display = 'flex';
         }
     };
     
@@ -209,16 +254,25 @@ function createPeerConnection() {
         if (peerConnection.connectionState === 'connected') {
             connectionStatus.textContent = '📹 Streaming';
             connectionStatus.style.color = '#4caf50';
-        } else if (peerConnection.connectionState === 'disconnected') {
+        } else if (peerConnection.connectionState === 'disconnected' || 
+                   peerConnection.connectionState === 'failed' || 
+                   peerConnection.connectionState === 'closed') {
+            
             connectionStatus.textContent = '🔴 Disconnected';
             connectionStatus.style.color = '#f44336';
             placeholder.style.display = 'flex';
             placeholder.innerHTML = `
                 <div style="text-align: center;">
                     <p style="margin-bottom: 10px;">Stream disconnected</p>
-                    <p style="font-size: 0.9rem; opacity: 0.8;">The host may have ended the stream</p>
+                    <p style="font-size: 0.9rem; opacity: 0.8;">Attempting to reconnect automatically...</p>
                 </div>
             `;
+            
+            // Auto-reconnect after a short delay
+            setTimeout(() => {
+                console.log('Attempting auto-reconnect...');
+                reconnect();
+            }, 3000);
         }
     };
 }

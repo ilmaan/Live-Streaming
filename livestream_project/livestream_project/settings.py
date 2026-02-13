@@ -24,11 +24,15 @@ SECRET_KEY = 'django-insecure-change-this-in-production'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # DEBUG = True
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 # ALLOWED_HOSTS = ['ilmaanandaafreen.pythonanywhere.com','https://ilmaanandaafreen.pythonanywhere.com/','http://ilmaanandaafreen.pythonanywhere.com/']
+# ALLOWED_HOSTS = ['https://nonreducible-interestuarine-marlyn.ngrok-free.dev','nonreducible-interestuarine-marlyn.ngrok-free.dev','https://nonreducible-interestuarine-marlyn.ngrok-free.dev/','.ngrok-free.dev']
 
+
+# SECURE_SSL_REDIRECT = False
+SECURE_SSL_REDIRECT = False
 
 # Application definition
 
